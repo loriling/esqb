@@ -4,10 +4,19 @@
       <el-main>
         <el-row>
           <el-col :span="15">
+            <el-row>
+              <el-col :span="5">
+                <el-input placeholder="条数" v-model="size"></el-input>
+              </el-col>
+              <el-col :span="5">
+                <el-input placeholder="从第几条开始" v-model="from"></el-input>
+              </el-col>
+            </el-row>
             <OneCondition @add="conditionAdded"/>
             <hr class="divider"/>
-            <OneCondition v-for="c of conditions" :conditionKey="c.conditionKey" :conditionType="c.conditionType"
-                          :queryType="c.queryType" :fieldName="c.fieldName" :fieldValue="c.fieldValue"
+            <OneCondition v-for="c in conditions" :key="c.conditionKey" :conditionKey="c.conditionKey" :conditionType="c.conditionType"
+                          :queryType="c.queryType" :fieldName="c.fieldName" :fieldValue="c.fieldValue" :sortDirection="c.sortDirection"
+                          :range="c.range"
                           @remove="conditionRemoved" @change="conditionChanged"/>
 
             <div class="grid-content bg-purple">
@@ -79,14 +88,16 @@ export default {
     },
 
     conditionAdded(condition) {
-      console.log('conditionAdded: ' + JSON.stringify(condition));
       this.conditions.push(condition);
     },
 
     conditionRemoved(conditionKey) {
-      this.conditions.splice(this.conditions.findIndex(c => {
+      let index = this.conditions.findIndex(c => {
         return c.conditionKey === conditionKey
-      }), 1);
+      });
+      if (index >= 0) {
+        this.conditions.splice(index, 1);
+      }
     },
 
     conditionChanged(condition) {
@@ -98,6 +109,8 @@ export default {
   },
   data() {
     return {
+      size: '',
+      from: '',
       conditions: [],
       codeOptions: {
         tabSize: 4,
@@ -139,12 +152,24 @@ export default {
 
     code() {
       let code = 'bodybuilder()\n';
+      if (this.size && !isNaN(this.size)) {
+        code += '        .size(' + this.size + ')\n';
+      }
+      if (this.from && !isNaN(this.from)) {
+        code += '        .from(' + this.from + ')\n';
+      }
       this.conditions.forEach(c => {
         code += '        .' + c.exp + '\n';
       });
       code += '        .build()';
       return code;
     }
+  },
+
+  beforeMount() {
+  },
+
+  beforeUpdate() {
   }
 }
 </script>
@@ -190,5 +215,11 @@ export default {
   height: 10px;
   border: none;
   border-top: 2px dashed #0066CC;
+}
+.el-input, .el-select {
+  width: 100%;
+}
+.el-col {
+  padding-right: 5px;
 }
 </style>
