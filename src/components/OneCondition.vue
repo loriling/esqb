@@ -46,6 +46,7 @@
         </el-col>
 
         <RangeDialog :visible="rangeDialogShow" :value="range" @close="rangeDialogClose"/>
+        <NestedConditionDialog :visible="nestedConditionDialogShow" :value="nested" @close="nestedConditionDialogClose"/>
 
         <el-col :span="2">
             <el-button v-if="this.conditionKey === undefined" @click="add" type="primary"><i class="el-icon-circle-plus-outline"></i>添加</el-button>
@@ -57,8 +58,12 @@
 <script>
     import uuid from 'uuid/v4';
     import RangeDialog from "~/components/RangeDialog";
+    import NestedConditionDialog from "~/components/NestedConditionDialog";
     export default {
-        components: {RangeDialog},
+        components: {
+            RangeDialog,
+            NestedConditionDialog
+        },
         props: {
             conditionKey: String,
             conditionType: String,
@@ -66,7 +71,8 @@
             fieldName: String,
             fieldValue: String,
             sortDirection: String,
-            range: Object
+            range: Object,
+            nested: Object
         },
         methods: {
             conditionTypeChange(conditionType) {
@@ -74,6 +80,10 @@
                     this.queryTypeShow = false;
                     this.fieldValueShow = false;
                     this.sortDirectionShow = true;
+                } else if (conditionType === 'rawOption') {
+                    this.queryTypeShow = false;
+                    this.fieldValueShow = true;
+                    this.sortDirectionShow = false;
                 } else {
                     this.queryTypeShow = true;
                     this.fieldValueShow = true;
@@ -86,6 +96,9 @@
                 if (queryType === 'match_all') {
                     this.fieldNameShow = false;
                     this.fieldValueShow = false;
+                } else if (queryType === 'nested') {
+                    this.fieldNameShow = false;
+                    this.fieldValueShow = true;
                 } else {
                     this.fieldNameShow = true;
                     this.fieldValueShow = true;
@@ -94,7 +107,7 @@
             },
 
             commonChange() {
-                this.calculateExp();
+                this.calculateExp(this.condition);
                 this.$emit('change', this.condition);
             },
 
@@ -107,7 +120,7 @@
                     });
                     return;
                 }
-                if (['sort'].includes(this.condition.conditionType)) {
+                if (['sort', 'rawOption'].includes(this.condition.conditionType)) {
 
                 } else {
                     if (!this.condition.queryType) {
@@ -120,7 +133,7 @@
                     }
                 }
 
-                this.calculateExp();
+                this.calculateExp(this.condition);
                 this.$emit('add', Object.assign({}, this.condition, {
                     conditionKey: uuid()
                 }));
@@ -130,36 +143,55 @@
                 this.$emit('remove', this.condition.conditionKey);
             },
 
-            calculateExp() {
-                let exp = this.condition.conditionType;
-                if (this.condition.conditionType === 'sort') {
-                    exp += '("' + this.condition.fieldName + '"';
-                    if (this.condition.sortDirection) {
-                        exp += ', "' + this.condition.sortDirection + '"';
+            calculateExp(condition) {
+                let exp = condition.conditionType;
+                if (condition.conditionType === 'sort') {
+                    exp += '("' + condition.fieldName + '"';
+                    if (condition.sortDirection) {
+                        exp += ', "' + condition.sortDirection + '"';
                     }
                     exp += ')';
+                } else if (condition.conditionType === 'rawOption') {
+                    if (condition.fieldName !== undefined && condition.fieldValue !== undefined) {
+                        exp += '("' + condition.fieldName + '", ' + condition.fieldValue + ')';
+                    }
                 } else {
-                    exp += '("' + this.condition.queryType + '"';
-                    if (this.condition.queryType !== 'match_all') {
-                        if (this.condition.fieldName !== undefined) {
-                            exp += ', "' + this.condition.fieldName + '",';
+                    exp += '("' + condition.queryType + '"';
+
+                    if (condition.queryType === 'nested'){
+                        let nested = JSON.parse(condition.fieldValue);
+                        if (nested.path) {
+                            exp += ', { path: ' + nested.path + ' }, q => { return q';
+                            nested.conditions.forEach(c => {
+                                exp += '.' + this.calculateExp(c)
+                            });
+                            exp += '; }';
                         }
-                        if (this.condition.fieldValue !== undefined) {
-                            if (this.condition.queryType === 'range') {
-                                exp += this.condition.fieldValue;
-                            } else {
-                                exp += '"' + this.condition.fieldValue + '"';
+                    } else {
+                        if (condition.queryType !== 'match_all') {
+                            if (condition.fieldName !== undefined) {
+                                exp += ', "' + condition.fieldName + '",';
+                            }
+                            if (condition.fieldValue !== undefined) {
+                                if (condition.queryType === 'range') {
+                                    exp += condition.fieldValue;
+                                } else {
+                                    exp += '"' + condition.fieldValue + '"';
+                                }
                             }
                         }
                     }
                     exp += ')';
                 }
-                this.condition.exp = exp;
+                condition.exp = exp;
+                return exp;
             },
 
             fieldValueFocus(e) {
                 if (this.condition.queryType === 'range') {
                     this.rangeDialogShow = true;
+                } else if (this.condition.queryType === 'nested') {
+                    this.nestedConditionDialogShow = true;
                 }
             },
 
@@ -176,6 +208,13 @@
                 if (e.gte && !isNaN(e.gte))
                     value.gte = e.gte;
                 this.condition.fieldValue = JSON.stringify(value);
+                this.commonChange();
+            },
+
+            nestedConditionDialogClose(e) {
+                this.nestedConditionDialogShow = false;
+                this.condition.nested = e;
+                this.condition.fieldValue = JSON.stringify(e);
                 this.commonChange();
             }
         },
@@ -202,6 +241,9 @@
                 }, {
                     value: 'sort',
                     label: '排序'
+                }, {
+                    value: 'rawOption',
+                    label: '自定义'
                 }],
                 queryTypeShow: true,
                 queryOptions: [{
@@ -232,7 +274,8 @@
                     fieldName: this.fieldName,
                     fieldValue: this.fieldValue,
                     sortDirection: this.sortDirection,
-                    range: this.range
+                    range: this.range,
+                    nested: this.nested
                 },
 
                 sortDirectionShow: false,
@@ -245,6 +288,7 @@
                 }],
 
                 rangeDialogShow: false,
+                nestedConditionDialogShow: false
             }
         },
 
@@ -253,10 +297,14 @@
                 this.queryTypeShow = false;
                 this.fieldValueShow = false;
                 this.sortDirectionShow = true;
+            } else if (this.conditionType === 'rawOption') {
+                this.queryTypeShow = false;
             }
             if (this.queryType === 'match_all') {
                 this.fieldNameShow = false;
                 this.fieldValueShow = false;
+            } else if (this.queryType === 'nested') {
+                this.fieldNameShow = false;
             }
         }
     }

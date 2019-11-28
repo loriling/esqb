@@ -12,12 +12,7 @@
                 <el-input placeholder="从第几条开始" v-model="from"></el-input>
               </el-col>
             </el-row>
-            <OneCondition @add="conditionAdded"/>
-            <hr class="divider"/>
-            <OneCondition v-for="c in conditions" :key="c.conditionKey" :conditionKey="c.conditionKey" :conditionType="c.conditionType"
-                          :queryType="c.queryType" :fieldName="c.fieldName" :fieldValue="c.fieldValue" :sortDirection="c.sortDirection"
-                          :range="c.range"
-                          @remove="conditionRemoved" @change="conditionChanged"/>
+            <Conditions :value="conditions" />
 
             <div class="grid-content bg-purple">
               <codemirror :value="code" :options="codeOptions"></codemirror>
@@ -72,11 +67,12 @@
   import'codemirror/addon/fold/markdown-fold.js'
   import'codemirror/addon/fold/xml-fold.js'
   import OneCondition from "~/components/OneCondition";
+  import Conditions from "~/components/Conditions";
 
   var bodybuilder = require('bodybuilder');
 
 export default {
-  components: {OneCondition},
+  components: {Conditions},
   methods: {
     startHacking () {
       this.$notify({
@@ -85,26 +81,6 @@ export default {
         message: 'We\'ve laid the ground work for you. It\'s time for you to build something epic!',
         duration: 5000
       })
-    },
-
-    conditionAdded(condition) {
-      this.conditions.push(condition);
-    },
-
-    conditionRemoved(conditionKey) {
-      let index = this.conditions.findIndex(c => {
-        return c.conditionKey === conditionKey
-      });
-      if (index >= 0) {
-        this.conditions.splice(index, 1);
-      }
-    },
-
-    conditionChanged(condition) {
-      this.conditions.splice([this.conditions.findIndex(c => {
-        return c.conditionKey === condition.conditionKey
-      })], 1, condition);
-
     }
   },
   data() {
@@ -150,19 +126,22 @@ export default {
       return ret;
     },
 
-    code() {
-      let code = 'bodybuilder()\n';
-      if (this.size && !isNaN(this.size)) {
-        code += '        .size(' + this.size + ')\n';
+    code: {
+      get() {
+        let code = 'bodybuilder()\n';
+        if (this.size && !isNaN(this.size)) {
+          code += '        .size(' + this.size + ')\n';
+        }
+        if (this.from && !isNaN(this.from)) {
+          code += '        .from(' + this.from + ')\n';
+        }
+        this.conditions.forEach(c => {
+          code += '        .' + c.exp + '\n';
+        });
+        code += '        .build()';
+        return code;
       }
-      if (this.from && !isNaN(this.from)) {
-        code += '        .from(' + this.from + ')\n';
-      }
-      this.conditions.forEach(c => {
-        code += '        .' + c.exp + '\n';
-      });
-      code += '        .build()';
-      return code;
+
     }
   },
 
@@ -211,11 +190,7 @@ export default {
   height: auto;
 }
 
-.divider {
-  height: 10px;
-  border: none;
-  border-top: 2px dashed #0066CC;
-}
+
 .el-input, .el-select {
   width: 100%;
 }
